@@ -4,44 +4,46 @@ import { PayrollCalculation } from '../types';
 import { formatMonthYear } from '../utils/dateUtils';
 
 interface PayrollPreviewProps {
-  payrollCalculations: PayrollCalculation[];
-  advances: any[];
+  monthlyPayrolls: Record<string, PayrollCalculation[]>;
 }
 
-export const PayrollPreview: React.FC<PayrollPreviewProps> = ({ payrollCalculations, advances }) => {
+interface HistoricalSummary {
+  month: string;
+  calculations: PayrollCalculation[];
+  totalNet: number;
+  totalDeductions: number;
+  totalBonuses: number;
+  totalTransport: number;
+  employeeCount: number;
+}
+
+export const PayrollPreview: React.FC<PayrollPreviewProps> = ({ monthlyPayrolls }) => {
   const [showHistory, setShowHistory] = React.useState(false);
+  const [showPayslips, setShowPayslips] = React.useState(false);
   const [startMonth, setStartMonth] = React.useState(new Date().toISOString().slice(0, 7));
   const [endMonth, setEndMonth] = React.useState(new Date().toISOString().slice(0, 7));
-  const [historicalData, setHistoricalData] = React.useState<any[]>([]);
+  const availableMonths = React.useMemo(() => Object.keys(monthlyPayrolls).sort(), [monthlyPayrolls]);
+  const defaultMonth = availableMonths.length > 0 ? availableMonths[availableMonths.length - 1] : new Date().toISOString().slice(0, 7);
+  const [selectedMonth, setSelectedMonth] = React.useState(defaultMonth);
+  const [historicalData, setHistoricalData] = React.useState<HistoricalSummary[]>([]);
 
-  // Get all stored payroll calculations from localStorage
-  const getAllStoredPayrolls = () => {
-    try {
-      const stored = localStorage.getItem('payrollCalculations');
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
+  React.useEffect(() => {
+    if (availableMonths.length > 0 && !availableMonths.includes(selectedMonth)) {
+      setSelectedMonth(availableMonths[availableMonths.length - 1]);
     }
-  };
+  }, [availableMonths, selectedMonth]);
 
   const generateHistoricalReport = () => {
-    const allPayrolls = getAllStoredPayrolls();
     const startDate = new Date(startMonth + '-01');
     const endDate = new Date(endMonth + '-01');
-    
+
     // Group payrolls by month and filter by date range
     const monthlyData: { [key: string]: PayrollCalculation[] } = {};
-    
-    allPayrolls.forEach((calc: PayrollCalculation) => {
-      // Try to determine the month from the calculation date or use current month as fallback
-      const calcMonth = calc.employee.createdDate?.slice(0, 7) || new Date().toISOString().slice(0, 7);
-      const calcDate = new Date(calcMonth + '-01');
-      
-      if (calcDate >= startDate && calcDate <= endDate) {
-        if (!monthlyData[calcMonth]) {
-          monthlyData[calcMonth] = [];
-        }
-        monthlyData[calcMonth].push(calc);
+
+    Object.entries(monthlyPayrolls).forEach(([month, calculations]) => {
+      const monthDate = new Date(month + '-01');
+      if (monthDate >= startDate && monthDate <= endDate) {
+        monthlyData[month] = calculations;
       }
     });
     
@@ -109,11 +111,12 @@ export const PayrollPreview: React.FC<PayrollPreviewProps> = ({ payrollCalculati
     URL.revokeObjectURL(url);
   };
 
-  const totalPayroll = payrollCalculations.reduce((sum, calc) => sum + calc.netSalary, 0);
-  const totalDeductions = payrollCalculations.reduce((sum, calc) => sum + calc.deductions.total, 0);
-  const totalTransportAllowance = payrollCalculations.reduce((sum, calc) => sum + calc.transportAllowance, 0);
-  const totalAdvances = advances ? advances.reduce((sum, adv) => sum + adv.amount, 0) : payrollCalculations.reduce((sum, calc) => sum + calc.deductions.advance, 0);
-  const totalBonuses = payrollCalculations.reduce((sum, calc) => sum + (calc.bonusCalculations?.total || calc.bonuses || 0), 0);
+  const currentCalculations = monthlyPayrolls[selectedMonth] || [];
+  const totalPayroll = currentCalculations.reduce((sum, calc) => sum + calc.netSalary, 0);
+  const totalDeductions = currentCalculations.reduce((sum, calc) => sum + calc.deductions.total, 0);
+  const totalTransportAllowance = currentCalculations.reduce((sum, calc) => sum + calc.transportAllowance, 0);
+  const totalAdvances = currentCalculations.reduce((sum, calc) => sum + calc.deductions.advance, 0);
+  const totalBonuses = currentCalculations.reduce((sum, calc) => sum + (calc.bonusCalculations?.total || calc.bonuses || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -127,12 +130,36 @@ export const PayrollPreview: React.FC<PayrollPreviewProps> = ({ payrollCalculati
             <History className="h-4 w-4" />
             <span>{showHistory ? 'Ocultar' : 'Ver'} Histórico</span>
           </button>
+          <button
+            onClick={() => setShowPayslips(!showPayslips)}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+          >
+            <FileText className="h-4 w-4" />
+            <span>{showPayslips ? 'Ocultar' : 'Ver'} Desprendibles</span>
+          </button>
           <div className="flex items-center space-x-2 text-sm text-gray-500">
             <Calendar className="h-4 w-4" />
             <span>Actualizado: {new Date().toLocaleString()}</span>
           </div>
         </div>
       </div>
+
+      {availableMonths.length > 0 && (
+        <div className="flex justify-end">
+          <label className="mr-2 text-sm font-medium text-gray-700">Mes:</label>
+          <select
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-lg"
+          >
+            {availableMonths.map(month => (
+              <option key={month} value={month}>
+                {formatMonthYear(month)}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Historical Report Section */}
       {showHistory && (
@@ -243,7 +270,7 @@ export const PayrollPreview: React.FC<PayrollPreviewProps> = ({ payrollCalculati
         </div>
       )}
 
-      {payrollCalculations.length > 0 ? (
+      {currentCalculations.length > 0 ? (
         <>
           {/* Summary Cards */}
           <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
@@ -260,7 +287,7 @@ export const PayrollPreview: React.FC<PayrollPreviewProps> = ({ payrollCalculati
                 <User className="h-6 w-6" />
                 <span className="text-sm font-medium">Empleados</span>
               </div>
-              <p className="text-2xl font-bold">{payrollCalculations.length}</p>
+              <p className="text-2xl font-bold">{currentCalculations.length}</p>
             </div>
             
             <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white p-6 rounded-lg">
@@ -293,12 +320,19 @@ export const PayrollPreview: React.FC<PayrollPreviewProps> = ({ payrollCalculati
                 <span className="text-sm font-medium">Bonificaciones</span>
               </div>
               <p className="text-2xl font-bold">${totalBonuses.toLocaleString()}</p>
-            </div>
           </div>
+        </div>
 
-          {/* Detailed Employee Cards - New Layout */}
+        {!showPayslips && (
+          <div className="text-center text-sm text-gray-500 my-4">
+            Haz clic en "Ver Desprendibles" para mostrar los detalles.
+          </div>
+        )}
+
+        {/* Detailed Employee Cards - New Layout */}
+        {showPayslips && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {payrollCalculations.map((calc) => (
+            {currentCalculations.map((calc) => (
               <div key={calc.employee.id} className="bg-white rounded-lg shadow-lg border border-gray-200 p-6">
                 <div className="flex items-center space-x-3 mb-4">
                   <div className="bg-blue-100 p-2 rounded-full">
@@ -312,7 +346,7 @@ export const PayrollPreview: React.FC<PayrollPreviewProps> = ({ payrollCalculati
                 
                 {/* Devengar Section */}
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
-                  <h4 className="font-semibold text-green-800 mb-3 text-center">DEVENGAR</h4>
+                  <h4 className="font-semibold text-green-800 mb-3 text-center">DEVENGADO</h4>
                   <div className="space-y-2">
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-700">Días trabajados al mes</span>
@@ -324,12 +358,14 @@ export const PayrollPreview: React.FC<PayrollPreviewProps> = ({ payrollCalculati
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-700">Salario Base</span>
-                      <span className="font-medium">${calc.baseSalary.toLocaleString()}</span>
+                      <span className="text-sm text-gray-700">Base Salarial</span>
+                      <span className="font-medium text-blue-700">${calc.baseSalary.toLocaleString()}</span>
                     </div>
+                    <div className="border-t border-green-300 pt-2 mt-2">
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-700">Salario Bruto</span>
+                      <span className="text-sm text-gray-700">Salario Mes</span>
                       <span className="font-medium">${calc.grossSalary.toLocaleString()}</span>
+                    </div>
                     </div>
                     
                     {calc.transportAllowance > 0 && (
@@ -341,7 +377,7 @@ export const PayrollPreview: React.FC<PayrollPreviewProps> = ({ payrollCalculati
                     
                     {/* Novedades Adicionadas */}
                     {calc.novelties.filter(n => 
-                      ['FIXED_COMPENSATION', 'SALES_BONUS', 'FIXED_OVERTIME', 'UNEXPECTED_OVERTIME', 'NIGHT_SURCHARGE', 'SUNDAY_WORK', 'GAS_ALLOWANCE'].includes(n.type)
+                      ['FIXED_COMPENSATION', 'SALES_BONUS', 'FIXED_OVERTIME', 'UNEXPECTED_OVERTIME', 'NIGHT_SURCHARGE', 'SUNDAY_WORK', 'GAS_ALLOWANCE','STUDY_LICENSE'].includes(n.type)
                     ).length > 0 && (
                       <div className="border-t border-green-300 pt-2 mt-2">
                         <h5 className="text-sm font-medium text-green-800 mb-2">Novedades Adicionadas:</h5>
@@ -523,6 +559,7 @@ export const PayrollPreview: React.FC<PayrollPreviewProps> = ({ payrollCalculati
               </div>
             ))}
           </div>
+          )}
         </>
       ) : (
         <div className="text-center py-12 bg-white rounded-lg shadow-md border border-gray-200">

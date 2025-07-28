@@ -14,6 +14,8 @@ interface PayrollCalculatorProps {
   deductionRates: DeductionRates;
   setPayrollCalculations: (calculations: PayrollCalculation[]) => void;
   payrollCalculations: PayrollCalculation[];
+  monthlyPayrolls: Record<string, PayrollCalculation[]>;
+  setMonthlyPayrolls: (history: Record<string, PayrollCalculation[]>) => void;
 }
 
 export const PayrollCalculator: React.FC<PayrollCalculatorProps> = ({ 
@@ -22,12 +24,19 @@ export const PayrollCalculator: React.FC<PayrollCalculatorProps> = ({
   advances,
   deductionRates,
   setPayrollCalculations,
-  payrollCalculations 
+  payrollCalculations,
+  monthlyPayrolls,
+  setMonthlyPayrolls
 }) => {
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10));
   const [isCalculating, setIsCalculating] = useState(false);
   const [tableZoom, setTableZoom] = useState(100);
+
+  React.useEffect(() => {
+    const stored = monthlyPayrolls[selectedMonth] || [];
+    setPayrollCalculations(stored);
+  }, [selectedMonth, monthlyPayrolls, setPayrollCalculations]);
 
   const calculatePayroll = () => {
     setIsCalculating(true);
@@ -41,18 +50,10 @@ export const PayrollCalculator: React.FC<PayrollCalculatorProps> = ({
       // Get all novelties for this employee
       const allEmployeeNovelties = novelties.filter(n => n.employeeId === employee.id);
       
-      // Get novelties that apply to the selected month
-      const monthlyNovelties = allEmployeeNovelties.filter(n => {
-        const noveltyMonth = n.date.slice(0, 7);
-        
-        // If it's a recurring license, check if it should apply to this month
-        if (n.isRecurring && n.startMonth) {
-          return n.startMonth <= selectedMonth;
-        }
-        
-        // For non-recurring novelties, only include if they're for this specific month
-        return noveltyMonth === selectedMonth;
-      });
+      // Get novelties that are explicitly registered for the selected month
+      const monthlyNovelties = allEmployeeNovelties.filter(n =>
+        n.date.slice(0, 7) === selectedMonth
+      );
       
       // For recurring licenses, create a virtual novelty for this month if it doesn't exist
       const recurringLicenses = allEmployeeNovelties.filter(n => 
@@ -107,16 +108,18 @@ export const PayrollCalculator: React.FC<PayrollCalculatorProps> = ({
       
 
       // Calculate daily values and round immediately to avoid decimals
-      const dailySalary = roundToNearest500Or1000(employee.salary / PAYROLL_DAYS); // Always use 30 for daily salary calculation
+      // const dailySalary = roundToNearest500Or1000(employee.salary / PAYROLL_DAYS); // Always use 30 for daily salary calculation
+      const dailySalary = (employee.salary / PAYROLL_DAYS); // Always use 30 for daily salary calculation
 
       // Calculate gross salary based on worked days this month
       const grossSalary = roundToNearest500Or1000(dailySalary * workedDaysThisMonth);
 
       // Calculate daily transport allowance using configurable rate
 
-      const dailyTransportAllowance = roundToNearest500Or1000(
-        deductionRates.transportAllowance / PAYROLL_DAYS
-      );
+      const dailyTransportAllowance = deductionRates.transportAllowance / PAYROLL_DAYS;
+      // const dailyTransportAllowance = roundToNearest500Or1000(
+      //   deductionRates.transportAllowance / PAYROLL_DAYS
+      // );
 
       // Transport allowance (only for NOMINA employees earning less than 2 minimum salaries)
       const transportAllowance = (
@@ -214,6 +217,7 @@ export const PayrollCalculator: React.FC<PayrollCalculatorProps> = ({
     });
     
     setPayrollCalculations(calculations);
+    setMonthlyPayrolls(prev => ({ ...prev, [selectedMonth]: calculations }));
     setIsCalculating(false);
   };
 
@@ -537,7 +541,7 @@ export const PayrollCalculator: React.FC<PayrollCalculatorProps> = ({
                       Empleado
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Sueldo Básico
+                      Base Salarial
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Días Trabajados

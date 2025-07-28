@@ -70,7 +70,7 @@ export const EmployeeManagement: React.FC<EmployeeManagementProps> = ({ employee
       dateOfBirth: formData.dateOfBirth,
       salary: parseFloat(formData.salary),
       isPensioned: formData.isPensioned,
-      workedDays: editingEmployee ? editingEmployee.workedDays : calculateWorkedDays(formData.createdDate),
+      workedDays: calculateWorkedDays(formData.createdDate),
       createdDate: formData.createdDate,
     };
 
@@ -253,20 +253,18 @@ export const EmployeeManagement: React.FC<EmployeeManagementProps> = ({ employee
                   </label>
                 </div>
                 
-                {!editingEmployee && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Fecha de Ingreso
-                    </label>
-                    <input
-                      type="date"
-                      value={formData.createdDate}
-                      onChange={(e) => setFormData({ ...formData, createdDate: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      required
-                    />
-                  </div>
-                )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Fecha de Ingreso
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.createdDate}
+                    onChange={(e) => setFormData({ ...formData, createdDate: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                  />
+                </div>
               </div>
               
               <div className="flex justify-end space-x-3 pt-4">
@@ -336,7 +334,7 @@ export const EmployeeManagement: React.FC<EmployeeManagementProps> = ({ employee
               </div>
               <div className="pt-2 border-t">
                 <p className="text-gray-600">Salario: <span className="font-semibold">${employee.salary.toLocaleString()}</span></p>
-                <p className="text-gray-600">Días trabajados totales: <span className="font-semibold">{employee.workedDays}</span></p>
+                <p className="text-gray-600">Fecha de ingreso: <span className="font-semibold">{employee.createdDate ? new Date(employee.createdDate).toLocaleDateString() : 'N/A'}</span></p>
                 {employee.isPensioned && (
                   <p className="text-blue-600 text-sm font-medium">✓ Empleado pensionado</p>
                 )}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, CreditCard, User, Calendar, DollarSign, Trash2, Edit, Save, X } from 'lucide-react';
+import { Plus, CreditCard, User, Calendar, DollarSign, Trash2, Edit, Save, X, FileText, Download } from 'lucide-react';
 import { Employee, AdvancePayment } from '../types';
 import { formatMonthYear } from '../utils/dateUtils';
 
@@ -29,6 +29,7 @@ export const AdvanceManagement: React.FC<AdvanceManagementProps> = ({
   const [editingEmployees, setEditingEmployees] = useState<Set<string>>(new Set());
   
   const [editingAdvance, setEditingAdvance] = useState<AdvancePayment | null>(null);
+  const [showPayslips, setShowPayslips] = useState(false);
 
   const [formData, setFormData] = useState({
     employeeId: '',
@@ -41,15 +42,19 @@ export const AdvanceManagement: React.FC<AdvanceManagementProps> = ({
   });
 
   // Get employees with and without advances for selected month
+  const employeesForMonth = employees.filter(emp =>
+    !emp.createdDate || emp.createdDate.slice(0, 7) <= selectedMonth
+  );
+
   const employeesWithAdvances = advances
     .filter(advance => advance.month === selectedMonth)
     .map(advance => advance.employeeId);
-  
-  const employeesWithoutAdvances = employees
+
+  const employeesWithoutAdvances = employeesForMonth
     .filter(emp => !employeesWithAdvances.includes(emp.id))
     .sort((a, b) => a.name.localeCompare(b.name));
-  
-  const employeesWithAdvancesData = employees
+
+  const employeesWithAdvancesData = employeesForMonth
     .filter(emp => employeesWithAdvances.includes(emp.id))
     .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -170,8 +175,68 @@ export const AdvanceManagement: React.FC<AdvanceManagementProps> = ({
     }
   };
 
+  const exportPayslipsTxt = () => {
+    const monthFormatted = formatMonthYear(selectedMonth);
+
+    let txtContent = `DESPRENDIBLES ANTICIPO QUINCENA - ${monthFormatted}\n`;
+    txtContent += `Fecha de generación: ${new Date().toLocaleDateString()}\n`;
+    txtContent += `${'='.repeat(50)}\n\n`;
+
+    const advancesForMonth = advances
+      .filter(a => a.month === selectedMonth &&
+        (!employees.find(emp => emp.id === a.employeeId)?.createdDate ||
+         employees.find(emp => emp.id === a.employeeId)!.createdDate!.slice(0,7) <= selectedMonth))
+      .sort((a, b) => a.employeeName.localeCompare(b.employeeName));
+
+    advancesForMonth.forEach((adv, index) => {
+      const employee = employees.find(emp => emp.id === adv.employeeId);
+      const totalDeductions = (adv.employeeFund || 0) + (adv.employeeLoan || 0);
+
+      const net = adv.amount - (adv.employeeFund || 0) - (adv.employeeLoan || 0);
+
+      txtContent += `${index + 1}. ${adv.employeeName}\n`;
+      if (employee) txtContent += `   Cédula: ${employee.cedula}\n`;
+      txtContent += `   Fecha: ${adv.date}\n`;
+      txtContent += `   Anticipo Quincena: $${adv.amount.toLocaleString()}\n`;
+      if (adv.employeeFund) {
+        txtContent += `   Aporte Fondo Empleados: -$${adv.employeeFund.toLocaleString()}\n`;
+      }
+      if (adv.employeeLoan) {
+        txtContent += `   Cartera Empleados: -$${adv.employeeLoan.toLocaleString()}\n`;
+      }
+      if (totalDeductions > 0) {
+        txtContent += `   TOTAL DEDUCCIONES: $${totalDeductions.toLocaleString()}\n`;
+      }
+      txtContent += `   NETO A PAGAR: $${net.toLocaleString()}\n`;
+      if (adv.description) {
+        txtContent += `   Descripción: ${adv.description}\n`;
+      }
+      txtContent += `\n`;
+    });
+
+    const totalNet = advancesForMonth.reduce(
+      (sum, adv) => sum + adv.amount - (adv.employeeFund || 0) - (adv.employeeLoan || 0),
+      0
+    );
+
+    txtContent += `${'='.repeat(50)}\n`;
+    txtContent += `TOTAL NETO A PAGAR: $${totalNet.toLocaleString()}\n`;
+
+    const blob = new Blob([txtContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `desprendibles_anticipo_${selectedMonth}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const totalAdvances = advances
-    .filter(advance => advance.month === selectedMonth)
+    .filter(advance =>
+      advance.month === selectedMonth &&
+      (!employees.find(emp => emp.id === advance.employeeId)?.createdDate ||
+       employees.find(emp => emp.id === advance.employeeId)!.createdDate!.slice(0, 7) <= selectedMonth)
+    )
     .reduce((sum, advance) => sum + advance.amount, 0);
 
   return (
@@ -190,6 +255,13 @@ export const AdvanceManagement: React.FC<AdvanceManagementProps> = ({
               className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
             />
           </div>
+          <button
+            onClick={() => setShowPayslips(!showPayslips)}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+          >
+            <FileText className="h-4 w-4" />
+            <span>{showPayslips ? 'Ocultar' : 'Ver'} Desprendibles</span>
+          </button>
           <button
             onClick={() => setIsFormOpen(true)}
             className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
@@ -213,7 +285,12 @@ export const AdvanceManagement: React.FC<AdvanceManagementProps> = ({
       </div>
 
       {/* Payslips Section */}
-      {showPayslips && advances.filter(a => a.month === selectedMonth).length > 0 && (
+      {showPayslips &&
+        advances.filter(a =>
+          a.month === selectedMonth &&
+          (!employees.find(emp => emp.id === a.employeeId)?.createdDate ||
+           employees.find(emp => emp.id === a.employeeId)!.createdDate!.slice(0, 7) <= selectedMonth)
+        ).length > 0 && (
         <div className="bg-white rounded-lg shadow-md border border-gray-200">
           <div className="px-6 py-4 border-b border-gray-200 bg-indigo-50">
             <div className="flex justify-between items-center">
@@ -233,12 +310,17 @@ export const AdvanceManagement: React.FC<AdvanceManagementProps> = ({
           <div className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {advances
-                .filter(advance => advance.month === selectedMonth)
+                .filter(advance =>
+                  advance.month === selectedMonth &&
+                  (!employees.find(emp => emp.id === advance.employeeId)?.createdDate ||
+                   employees.find(emp => emp.id === advance.employeeId)!.createdDate!.slice(0, 7) <= selectedMonth)
+                )
                 .sort((a, b) => a.employeeName.localeCompare(b.employeeName))
                 .map((advance) => {
                   const employee = employees.find(emp => emp.id === advance.employeeId);
                   const netAmount = advance.amount - (advance.employeeFund || 0) - (advance.employeeLoan || 0);
-                  
+                  const totalDeductions = (advance.employeeFund || 0) + (advance.employeeLoan || 0);
+
                   return (
                     <div key={advance.id} className="bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-200 rounded-lg p-6 shadow-sm">
                       <div className="flex items-center space-x-3 mb-4">
@@ -265,7 +347,7 @@ export const AdvanceManagement: React.FC<AdvanceManagementProps> = ({
                           
                           {advance.employeeFund && advance.employeeFund > 0 && (
                             <div className="flex justify-between items-center">
-                              <span className="text-sm text-gray-600">Fondo Empleados:</span>
+                              <span className="text-sm text-gray-600">Aporte Fondo Empleados:</span>
                               <span className="font-medium text-red-600">-${advance.employeeFund.toLocaleString()}</span>
                             </div>
                           )}
@@ -274,6 +356,12 @@ export const AdvanceManagement: React.FC<AdvanceManagementProps> = ({
                             <div className="flex justify-between items-center">
                               <span className="text-sm text-gray-600">Cartera Empleados:</span>
                               <span className="font-medium text-red-600">-${advance.employeeLoan.toLocaleString()}</span>
+                            </div>
+                          )}
+                          {totalDeductions > 0 && (
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-600">Total Deducciones:</span>
+                              <span className="font-medium text-black-600">${totalDeductions.toLocaleString()}</span>
                             </div>
                           )}
                         </div>
@@ -446,6 +534,9 @@ export const AdvanceManagement: React.FC<AdvanceManagementProps> = ({
                     Cartera Emp.
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Total Deducibles
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Neto a Pagar
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -461,7 +552,11 @@ export const AdvanceManagement: React.FC<AdvanceManagementProps> = ({
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {advances
-                  .filter(advance => advance.month === selectedMonth)
+                  .filter(advance =>
+                    advance.month === selectedMonth &&
+                    (!employees.find(emp => emp.id === advance.employeeId)?.createdDate ||
+                     employees.find(emp => emp.id === advance.employeeId)!.createdDate!.slice(0, 7) <= selectedMonth)
+                  )
                   .sort((a, b) => a.employeeName.localeCompare(b.employeeName))
                   .map((advance) => (
                     <tr key={advance.id} className="bg-green-25 hover:bg-green-50">
@@ -486,6 +581,13 @@ export const AdvanceManagement: React.FC<AdvanceManagementProps> = ({
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {advance.employeeLoan ? `$${advance.employeeLoan.toLocaleString()}` : '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {(
+                          (advance.employeeFund || 0) + (advance.employeeLoan || 0)
+                        ) > 0
+                          ? `$${((advance.employeeFund || 0) + (advance.employeeLoan || 0)).toLocaleString()}`
+                          : '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-purple-700">
                         ${(
@@ -547,7 +649,7 @@ export const AdvanceManagement: React.FC<AdvanceManagementProps> = ({
                   required
                 >
                   <option value="">Seleccionar empleado</option>
-                  {employees.map((employee) => (
+                  {employeesForMonth.map((employee) => (
                     <option key={employee.id} value={employee.id}>
                       {employee.name}
                     </option>

@@ -63,6 +63,7 @@ function App() {
   const [novelties, setNovelties]               = useLocalStorage<Novelty[]>           ('novelties',         []);
   const [advances, setAdvances]                 = useLocalStorage<AdvancePayment[]>    ('advances',          []);
   const [payrollCalculations, setPayroll]       = useLocalStorage<PayrollCalculation[]>('payrollCalculations', []);
+  const [monthlyPayrolls, setMonthlyPayrolls]   = useLocalStorage<Record<string, PayrollCalculation[]>>('monthlyPayrolls', {});
   const [deductionRates, setDeductionRates]     = useLocalStorage<DeductionRates>      ('deductionRates',    DEFAULT_DEDUCTION_RATES);
 
   // Migration function to add isPensioned field to existing employees
@@ -74,6 +75,22 @@ function App() {
       }))
     );
   }, [setEmployees]);
+
+  // Ensure existing study licenses remain recurring
+  React.useEffect(() => {
+    setNovelties(prev =>
+      prev.map(n =>
+        n.type === 'STUDY_LICENSE'
+          ? {
+              ...n,
+              isRecurring: n.isRecurring ?? true,
+              startMonth: n.startMonth ?? n.date.slice(0, 7)
+            }
+          : n
+      )
+    );
+  }, [setNovelties]);
+
   /* -----------------------------------------------------------------------
      Actualiza workedDays cada hora (UTC-5) sin sobrescribir en caliente
   ----------------------------------------------------------------------- */
@@ -140,10 +157,16 @@ function App() {
             deductionRates={deductionRates}
             payrollCalculations={payrollCalculations}
             setPayrollCalculations={setPayroll}
+            monthlyPayrolls={monthlyPayrolls}
+            setMonthlyPayrolls={setMonthlyPayrolls}
           />
         );
       case 'preview':
-        return <PayrollPreview payrollCalculations={payrollCalculations} advances={advances} />;
+        return (
+          <PayrollPreview
+            monthlyPayrolls={monthlyPayrolls}
+          />
+        );
       case 'settings':
         return (
           <SettingsManagement
