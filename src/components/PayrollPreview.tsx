@@ -23,8 +23,12 @@ export const PayrollPreview: React.FC<PayrollPreviewProps> = ({ monthlyPayrolls 
   const [startMonth, setStartMonth] = React.useState(new Date().toISOString().slice(0, 7));
   const [endMonth, setEndMonth] = React.useState(new Date().toISOString().slice(0, 7));
   const availableMonths = React.useMemo(() => Object.keys(monthlyPayrolls).sort(), [monthlyPayrolls]);
-  const defaultMonth = availableMonths.length > 0 ? availableMonths[availableMonths.length - 1] : new Date().toISOString().slice(0, 7);
-  const [selectedMonth, setSelectedMonth] = React.useState(defaultMonth);
+  
+  // Estado independiente para el mes seleccionado en previsualización
+  const [selectedMonth, setSelectedMonth] = React.useState(() => {
+    return availableMonths.length > 0 ? availableMonths[availableMonths.length - 1] : new Date().toISOString().slice(0, 7);
+  });
+  
   const [historicalData, setHistoricalData] = React.useState<HistoricalSummary[]>([]);
 
   React.useEffect(() => {
@@ -111,6 +115,13 @@ export const PayrollPreview: React.FC<PayrollPreviewProps> = ({ monthlyPayrolls 
     URL.revokeObjectURL(url);
   };
 
+  // Actualizar el mes seleccionado cuando hay nuevos meses disponibles
+  React.useEffect(() => {
+    if (availableMonths.length > 0 && !availableMonths.includes(selectedMonth)) {
+      setSelectedMonth(availableMonths[availableMonths.length - 1]);
+    }
+  }, [availableMonths, selectedMonth]);
+
   const currentCalculations = monthlyPayrolls[selectedMonth] || [];
   const totalPayroll = currentCalculations.reduce((sum, calc) => sum + calc.netSalary, 0);
   const totalDeductions = currentCalculations.reduce((sum, calc) => sum + calc.deductions.total, 0);
@@ -123,6 +134,24 @@ export const PayrollPreview: React.FC<PayrollPreviewProps> = ({ monthlyPayrolls 
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-900">Previsualización de Nómina</h2>
         <div className="flex items-center space-x-4">
+          {availableMonths.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Mes a Visualizar
+              </label>
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              >
+                {availableMonths.map(month => (
+                  <option key={month} value={month}>
+                    {formatMonthYear(month)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <button
             onClick={() => setShowHistory(!showHistory)}
             className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
@@ -143,23 +172,6 @@ export const PayrollPreview: React.FC<PayrollPreviewProps> = ({ monthlyPayrolls 
           </div>
         </div>
       </div>
-
-      {availableMonths.length > 0 && (
-        <div className="flex justify-end">
-          <label className="mr-2 text-sm font-medium text-gray-700">Mes:</label>
-          <select
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg"
-          >
-            {availableMonths.map(month => (
-              <option key={month} value={month}>
-                {formatMonthYear(month)}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
 
       {/* Historical Report Section */}
       {showHistory && (
@@ -273,6 +285,15 @@ export const PayrollPreview: React.FC<PayrollPreviewProps> = ({ monthlyPayrolls 
       {currentCalculations.length > 0 ? (
         <>
           {/* Summary Cards */}
+          <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 mb-6">
+            <div className="flex items-center justify-center space-x-2">
+              <Calendar className="h-5 w-5 text-indigo-600" />
+              <span className="text-lg font-semibold text-indigo-800">
+                Nómina de {formatMonthYear(selectedMonth)}
+              </span>
+            </div>
+          </div>
+          
           <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
             <div className="bg-gradient-to-r from-green-500 to-green-600 text-white p-6 rounded-lg">
               <div className="flex items-center space-x-2">
