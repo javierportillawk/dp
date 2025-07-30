@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, CreditCard, User, Calendar, DollarSign, Trash2, Edit, Save, X, FileText, Download } from 'lucide-react';
+import { Plus, CreditCard, User, Calendar, DollarSign, Trash2, Edit, Save, X, FileText, Download, MessageCircle, Send } from 'lucide-react';
 import { Employee, AdvancePayment } from '../types';
 import { formatMonthYear } from '../utils/dateUtils';
 
@@ -30,6 +30,101 @@ export const AdvanceManagement: React.FC<AdvanceManagementProps> = ({
   
   const [editingAdvance, setEditingAdvance] = useState<AdvancePayment | null>(null);
   const [showPayslips, setShowPayslips] = useState(false);
+
+  const sendWhatsAppMessage = (phone: string, message: string) => {
+    // Clean phone number (remove spaces, dashes, etc.)
+    const cleanPhone = phone.replace(/\D/g, '');
+    
+    // Add country code if not present (assuming Colombia +57)
+    const formattedPhone = cleanPhone.startsWith('57') ? cleanPhone : `57${cleanPhone}`;
+    
+    // Encode message for URL
+    const encodedMessage = encodeURIComponent(message);
+    
+    // Create WhatsApp URL
+    const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodedMessage}`;
+    
+    // Open WhatsApp
+    window.open(whatsappUrl, '_blank');
+  };
+
+  const generateAdvanceMessage = (advance: AdvancePayment, employee: Employee | undefined, monthFormatted: string) => {
+    const netAmount = advance.amount - (advance.employeeFund || 0) - (advance.employeeLoan || 0);
+    const totalDeductions = (advance.employeeFund || 0) + (advance.employeeLoan || 0);
+    
+    let message = `💰 *DESPRENDIBLE ANTICIPO QUINCENA*\n`;
+    message += `📅 *${monthFormatted}*\n\n`;
+    message += `👤 *${advance.employeeName}*\n`;
+    if (employee) message += `🆔 C.C. ${employee.cedula}\n`;
+    message += `📅 Fecha: ${new Date(advance.date).toLocaleDateString()}\n\n`;
+    
+    message += `💵 *ANTICIPO QUINCENA:*\n`;
+    message += `• Monto: $${advance.amount.toLocaleString()}\n\n`;
+    
+    if (totalDeductions > 0) {
+      message += `📉 *DEDUCCIONES:*\n`;
+      if (advance.employeeFund && advance.employeeFund > 0) {
+        message += `• Aporte Fondo Empleados: $${advance.employeeFund.toLocaleString()}\n`;
+      }
+      if (advance.employeeLoan && advance.employeeLoan > 0) {
+        message += `• Cartera Empleados: $${advance.employeeLoan.toLocaleString()}\n`;
+      }
+      message += `*Total Deducciones: $${totalDeductions.toLocaleString()}*\n\n`;
+    }
+    
+    message += `💵 *NETO A PAGAR: $${netAmount.toLocaleString()}*\n\n`;
+    
+    if (advance.description) {
+      message += `📝 *Descripción:* ${advance.description}\n\n`;
+    }
+    
+    message += `📱 Droguerías Popular\n`;
+    message += `Sistema de Anticipo Quincena`;
+    
+    return message;
+  };
+
+  const sendAdvanceWhatsApp = (advance: AdvancePayment) => {
+    const employee = employees.find(emp => emp.id === advance.employeeId);
+    if (!employee) {
+      alert('No se encontró la información del empleado.');
+      return;
+    }
+    
+    const monthFormatted = formatMonthYear(selectedMonth);
+    const message = generateAdvanceMessage(advance, employee, monthFormatted);
+    sendWhatsAppMessage(employee.phone, message);
+  };
+
+  const sendAllAdvancesWhatsApp = () => {
+    const monthFormatted = formatMonthYear(selectedMonth);
+    const advancesForMonth = advances.filter(a =>
+      a.month === selectedMonth &&
+      (!employees.find(emp => emp.id === a.employeeId)?.createdDate ||
+       employees.find(emp => emp.id === a.employeeId)!.createdDate!.slice(0,7) <= selectedMonth)
+    );
+    
+    if (advancesForMonth.length === 0) {
+      alert('No hay anticipos para enviar en este mes.');
+      return;
+    }
+    
+    let sentCount = 0;
+    advancesForMonth.forEach((advance, index) => {
+      setTimeout(() => {
+        const employee = employees.find(emp => emp.id === advance.employeeId);
+        if (employee) {
+          const message = generateAdvanceMessage(advance, employee, monthFormatted);
+          sendWhatsAppMessage(employee.phone, message);
+          sentCount++;
+          
+          if (sentCount === advancesForMonth.length) {
+            alert(`Se han enviado ${sentCount} desprendibles de anticipo por WhatsApp.`);
+          }
+        }
+      }, index * 1000); // 1 second delay between each message
+    });
+  };
 
   const [formData, setFormData] = useState({
     employeeId: '',
@@ -304,6 +399,13 @@ export const AdvanceManagement: React.FC<AdvanceManagementProps> = ({
                 <Download className="h-4 w-4" />
                 <span>Exportar Desprendibles</span>
               </button>
+              <button
+                onClick={sendAllAdvancesWhatsApp}
+                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+              >
+                <MessageCircle className="h-4 w-4" />
+                <span>Enviar Todos por WhatsApp</span>
+              </button>
             </div>
           </div>
           
@@ -380,6 +482,16 @@ export const AdvanceManagement: React.FC<AdvanceManagementProps> = ({
                             </p>
                           </div>
                         )}
+                      </div>
+                      
+                      <div className="border-t border-indigo-200 pt-3">
+                        <button
+                          onClick={() => sendAdvanceWhatsApp(advance)}
+                          className="w-full bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg flex items-center justify-center space-x-2 transition-colors text-sm"
+                        >
+                          <Send className="h-4 w-4" />
+                          <span>Enviar por WhatsApp</span>
+                        </button>
                       </div>
                     </div>
                   );
